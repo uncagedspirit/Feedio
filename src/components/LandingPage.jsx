@@ -508,7 +508,7 @@ export default function FeedbackBoardLanding() {
                   <h1 className="display text-[52px] md:text-[60px] leading-[1.08] tracking-tight text-[#1d1a16] mb-6">
                     Know exactly
                     <span className="block text-[#4f7c6e] italic">
-                      what to build
+                      what to improve
                     </span>
                     next.
                   </h1>
@@ -701,7 +701,7 @@ export default function FeedbackBoardLanding() {
               {[
                 {
                   icon: Icons.Target,
-                  title: "Stop guessing what to build",
+                  title: "Stop guessing what to improve next",
                   body: "Votes don't lie. The most-wanted features float to the top automatically, giving you honest, unfiltered signal.",
                 },
                 {
