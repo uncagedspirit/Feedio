@@ -46,6 +46,7 @@ const dbBoard = (r) => ({
   ownerName: r.owner_name, ownerAvatarInitials: r.owner_avatar_initials,
   ownerAvatarColor: r.owner_avatar_color, tags: r.tags, settings: r.settings,
   totalInteractions: r.total_interactions, createdAt: r.created_at?.slice(0, 10) ?? '',
+  isArchived: r.is_archived ?? false,
 })
 
 const dbPost = (r) => ({
@@ -58,7 +59,25 @@ const dbPost = (r) => ({
 const dbProfile = (p, email) => ({
   id: p.id, name: p.name, email: email ?? '',
   plan: p.plan, avatarInitials: p.avatar_initials, avatarColor: p.avatar_color,
+  subscriptionState: p.subscription_state ?? 'free',
 })
+
+// ─── ENFORCE-ACCESS HELPER ────────────────────────────────────────────────────
+// Calls the enforce-access edge function and returns the subscription_state.
+// Never throws — failures are logged but must not block login/signup.
+async function callEnforceAccess() {
+  try {
+    const { data, error } = await supabase.functions.invoke('enforce-access')
+    if (error) {
+      console.warn('[enforce-access] edge function returned error:', error.message ?? error)
+      return null
+    }
+    return data?.subscription_state ?? null
+  } catch (err) {
+    console.warn('[enforce-access] network error — skipping (user remains logged in):', err)
+    return null
+  }
+}
 
 // ─── PROVIDER ────────────────────────────────────────────────────────────────
 export function AppProvider({ children }) {
@@ -100,11 +119,23 @@ export function AppProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [fetchProfile])
 
-  // Re-fetch profile (call after payment redirect to pick up plan upgrade)
+  // ── refreshCurrentUser ───────────────────────────────────────────────────
+  // Called after payment redirects to pick up plan upgrades. Also invokes
+  // enforce-access to reconcile subscription_state.
   const refreshCurrentUser = useCallback(async () => {
     if (!SUPABASE_ENABLED || !currentUser) return
     const { data: { user } } = await supabase.auth.getUser()
-    if (user) { const u = await fetchProfile(user); if (u) setCurrentUser(u) }
+    if (!user) return
+
+    const profile = await fetchProfile(user)
+    if (!profile) return
+
+    // Merge in subscription_state from enforce-access (best-effort)
+    const subscriptionState = await callEnforceAccess()
+    setCurrentUser({
+      ...profile,
+      subscriptionState: subscriptionState ?? profile.subscriptionState,
+    })
   }, [currentUser, fetchProfile])
 
   // ══ AUTH ══════════════════════════════════════════════════════════════════
@@ -112,26 +143,54 @@ export function AppProvider({ children }) {
     if (!SUPABASE_ENABLED) {
       const found = MOCK_USERS.find(u => u.email === email)
       const u = found ?? { id: `user-${Date.now()}`, name: email.split('@')[0], email,
-        plan: 'free', avatarInitials: email.slice(0, 2).toUpperCase(), avatarColor: '#E0F2FE' }
+        plan: 'free', avatarInitials: email.slice(0, 2).toUpperCase(), avatarColor: '#E0F2FE',
+        subscriptionState: 'free' }
       setCurrentUser(u); ls_set(LS.USER, u)
       return { ok: true, user: u }
     }
+
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return { ok: false, error: error.message }
-    return { ok: true, user: await fetchProfile(data.user) }
+
+    const profile = await fetchProfile(data.user)
+    if (!profile) return { ok: false, error: 'Could not load profile' }
+
+    // Invoke enforce-access — never blocks login on failure
+    const subscriptionState = await callEnforceAccess()
+    const user = {
+      ...profile,
+      subscriptionState: subscriptionState ?? profile.subscriptionState,
+    }
+
+    setCurrentUser(user)
+    return { ok: true, user }
   }, [fetchProfile])
 
   const signup = useCallback(async (name, email, password) => {
     if (!SUPABASE_ENABLED) {
       const initials = (name[0] + (name.split(' ')[1]?.[0] ?? name[1] ?? '')).toUpperCase()
-      const u = { id: `user-${Date.now()}`, name, email, plan: 'free', avatarInitials: initials, avatarColor: '#CCFBF1' }
+      const u = { id: `user-${Date.now()}`, name, email, plan: 'free',
+        avatarInitials: initials, avatarColor: '#CCFBF1', subscriptionState: 'free' }
       setCurrentUser(u); ls_set(LS.USER, u)
       return { ok: true, user: u }
     }
+
     const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name } } })
     if (error) return { ok: false, error: error.message }
     await new Promise(r => setTimeout(r, 600))
-    const user = data.user ? await fetchProfile(data.user) : null
+
+    const profile = data.user ? await fetchProfile(data.user) : null
+    if (!profile) return { ok: true, user: null }
+
+    // Invoke enforce-access — new signups are always free, but keeps the
+    // pattern consistent and stamps last_active_at on the profile.
+    const subscriptionState = await callEnforceAccess()
+    const user = {
+      ...profile,
+      subscriptionState: subscriptionState ?? profile.subscriptionState,
+    }
+
+    setCurrentUser(user)
     return { ok: true, user }
   }, [fetchProfile])
 
@@ -144,14 +203,14 @@ export function AppProvider({ children }) {
   // ── upgradePlan — initiates a checkout session via the payment layer ─────
   const upgradePlan = useCallback(async () => {
     if (!SUPABASE_ENABLED) {
-      setCurrentUser(u => u ? { ...u, plan: 'pro' } : u)
+      setCurrentUser(u => u ? { ...u, plan: 'pro', subscriptionState: 'active' } : u)
       return { ok: true }
     }
     const { error } = await openProCheckout()
     return error ? { ok: false, error } : { ok: true }
   }, [])
 
-  // ── manageBilling — opens the billing portal via the payment layer ───────
+  // ── manageBilling — opens the billing portal for Pro users ───────────────
   const manageBilling = useCallback(async () => {
     if (!SUPABASE_ENABLED) {
       console.warn('[payment] manageBilling is not available in demo mode')
@@ -170,9 +229,17 @@ export function AppProvider({ children }) {
 
   useEffect(() => { if (SUPABASE_ENABLED) loadBoards() }, [loadBoards])
 
-  const getBoardBySlug  = useCallback((slug) => boards.find(b => b.slug === slug) ?? null, [boards])
-  const getUserBoards   = useCallback((uid)  => boards.filter(b => b.ownerId === uid),     [boards])
-  const getPublicBoards = useCallback(()     => boards.filter(b => b.visibility === 'public'), [boards])
+  const getBoardBySlug = useCallback((slug) => boards.find(b => b.slug === slug) ?? null, [boards])
+
+  // Returns ALL boards for the owner (active + archived) so the dashboard
+  // can display both sections.
+  const getUserBoards = useCallback((uid) => boards.filter(b => b.ownerId === uid), [boards])
+
+  // Only returns boards that are public AND not archived (for the public directory).
+  const getPublicBoards = useCallback(
+    () => boards.filter(b => b.visibility === 'public' && !b.isArchived),
+    [boards],
+  )
 
   const createBoard = useCallback(async (data) => {
     const slug = data.name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').slice(0, 40)
@@ -187,6 +254,7 @@ export function AppProvider({ children }) {
       settings: { requireName: data.settings?.requireName ?? true, requireEmail: data.settings?.requireEmail ?? false,
         allowAnonymous: data.settings?.allowAnonymous ?? false, showVoterCount: data.settings?.showVoterCount ?? true },
       total_interactions: 0,
+      is_archived: false,
     }
     if (!SUPABASE_ENABLED) {
       const board = dbBoard({ ...row, id: `board-${Date.now()}`, created_at: new Date().toISOString() })
@@ -204,6 +272,7 @@ export function AppProvider({ children }) {
     if (updates.name              != null) row.name               = updates.name
     if (updates.visibility        != null) row.visibility         = updates.visibility
     if (updates.totalInteractions != null) row.total_interactions = updates.totalInteractions
+    if (updates.isArchived        != null) row.is_archived        = updates.isArchived
     setBoards(prev => prev.map(b => b.id === boardId ? { ...b, ...updates } : b))
     if (!SUPABASE_ENABLED) return
     const { error } = await supabase.from('boards').update(row).eq('id', boardId)
@@ -293,6 +362,7 @@ export function AppProvider({ children }) {
 
   const canInteract = useCallback((board) => {
     if (!board) return false
+    if (board.isArchived) return false
     let ownerPlan = 'free'
     if (currentUser?.id === board.ownerId) ownerPlan = currentUser.plan ?? 'free'
     else ownerPlan = MOCK_USERS.find(u => u.id === board.ownerId)?.plan ?? 'free'
