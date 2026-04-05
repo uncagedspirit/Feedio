@@ -8,7 +8,7 @@ import {
   createContext, useContext, useState, useCallback, useEffect, useRef,
 } from 'react'
 import { supabase, SUPABASE_ENABLED } from '../lib/supabase'
-import { openProCheckout } from '../lib/stripe'
+import { openProCheckout, openBillingPortal } from '../lib/payment'
 import { MOCK_BOARDS, MOCK_POSTS, MOCK_USERS } from '../data/mockData'
 
 const AppContext = createContext(null)
@@ -100,7 +100,7 @@ export function AppProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [fetchProfile])
 
-  // Re-fetch profile (call after Stripe redirect to pick up plan upgrade)
+  // Re-fetch profile (call after payment redirect to pick up plan upgrade)
   const refreshCurrentUser = useCallback(async () => {
     if (!SUPABASE_ENABLED || !currentUser) return
     const { data: { user } } = await supabase.auth.getUser()
@@ -130,7 +130,7 @@ export function AppProvider({ children }) {
     }
     const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name } } })
     if (error) return { ok: false, error: error.message }
-    await new Promise(r => setTimeout(r, 600)) // let trigger run
+    await new Promise(r => setTimeout(r, 600))
     const user = data.user ? await fetchProfile(data.user) : null
     return { ok: true, user }
   }, [fetchProfile])
@@ -141,12 +141,23 @@ export function AppProvider({ children }) {
     setCurrentUser(null)
   }, [])
 
+  // ── upgradePlan — initiates a checkout session via the payment layer ─────
   const upgradePlan = useCallback(async () => {
     if (!SUPABASE_ENABLED) {
       setCurrentUser(u => u ? { ...u, plan: 'pro' } : u)
       return { ok: true }
     }
     const { error } = await openProCheckout()
+    return error ? { ok: false, error } : { ok: true }
+  }, [])
+
+  // ── manageBilling — opens the billing portal via the payment layer ───────
+  const manageBilling = useCallback(async () => {
+    if (!SUPABASE_ENABLED) {
+      console.warn('[payment] manageBilling is not available in demo mode')
+      return { ok: false, error: 'Not available in demo mode' }
+    }
+    const { error } = await openBillingPortal()
     return error ? { ok: false, error } : { ok: true }
   }, [])
 
@@ -231,7 +242,6 @@ export function AppProvider({ children }) {
     if (error) { console.error('[posts] add:', error); return null }
     const post = dbPost(ins)
     setPosts(prev => [post, ...prev])
-    // Increment board counter (using Supabase RPC or manual update)
     await supabase.from('boards').update({ total_interactions: (getBoardBySlug('') || {}).totalInteractions }).eq('id', boardId)
     setBoards(prev => prev.map(b => b.id === boardId ? { ...b, totalInteractions: (b.totalInteractions ?? 0) + 1 } : b))
     return post
@@ -269,9 +279,6 @@ export function AppProvider({ children }) {
     const delta = voted ? -1 : 1
     setMyVotes(prev => { const next = new Set(prev); voted ? next.delete(postId) : next.add(postId); return next })
     setPosts(prev => prev.map(p => p.id === postId ? { ...p, upvotes: p.upvotes + delta } : p))
-    // NOTE: upvote toggles do NOT increment totalInteractions.
-    // Interactions are counted as: number of posts submitted to this board.
-    // This prevents gaming the free-plan limit by upvote-toggling.
 
     if (!SUPABASE_ENABLED) return
 
@@ -280,30 +287,23 @@ export function AppProvider({ children }) {
     } else {
       await supabase.from('upvotes').insert({ post_id: postId, board_id: boardId, fingerprint: fp.current })
     }
-    // Sync real upvote count from DB
     const { data: post } = await supabase.from('posts').select('upvotes').eq('id', postId).single()
     if (post) setPosts(prev => prev.map(p => p.id === postId ? { ...p, upvotes: post.upvotes } : p))
   }, [myVotes])
 
-  /**
-   * canInteract — returns true if a consumer can submit a new request on this board.
-   * Limit is based solely on the number of posts (submissions) on the board,
-   * not upvote toggles. Free boards allow 25 submitted posts.
-   */
   const canInteract = useCallback((board) => {
     if (!board) return false
     let ownerPlan = 'free'
     if (currentUser?.id === board.ownerId) ownerPlan = currentUser.plan ?? 'free'
     else ownerPlan = MOCK_USERS.find(u => u.id === board.ownerId)?.plan ?? 'free'
     if (ownerPlan === 'pro') return true
-    // Count actual posts instead of the running totalInteractions counter
     const boardPostCount = posts.filter(p => p.boardId === board.id).length
     return boardPostCount < 25
   }, [currentUser, posts])
 
   const value = {
     currentUser, authLoading,
-    login, signup, logout, upgradePlan, refreshCurrentUser,
+    login, signup, logout, upgradePlan, manageBilling, refreshCurrentUser,
     boards, getBoardBySlug, getUserBoards, getPublicBoards,
     createBoard, updateBoard, deleteBoard, loadBoards,
     posts, getBoardPosts, addPost, updatePost, deletePost, loadBoardPosts,
