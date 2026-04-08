@@ -10,6 +10,8 @@ import BoardsPage from './pages/BoardsPage'
 import PublicBoardPage from './pages/PublicBoardPage'
 import DashboardPage from './pages/DashboardPage'
 import AdminBoardPage from './pages/AdminBoardPage'
+import TrialPage from './pages/TrialPage'
+import AdminPage from './pages/AdminPage'
 
 // ─── Spinner for the auth-loading state ─────────────────────────────────────
 function Splash() {
@@ -61,36 +63,30 @@ function Inner() {
 
   const openAuth = (tab = 'login') => { setAuthTab(tab); setAuthOpen(true) }
 
-  // Handle Stripe success redirect: /dashboard?checkout=success
-  // (The query string goes before the hash in some redirect scenarios,
-  //  so we also check window.location.search)
   const isStripeSuccess =
-    
     window.location.search.includes('checkout=success')
 
-  // On first render after Stripe redirect, refresh the user profile
-  // to pick up the plan upgrade the webhook applied.
   const [stripeHandled, setStripeHandled] = useState(false)
   if (isStripeSuccess && !stripeHandled) {
     setStripeHandled(true)
-    // Small delay to give the webhook time to fire, then refresh
     setTimeout(() => refreshCurrentUser(), 2000)
-    // Clean up URL
     if (window.history.replaceState) {
       window.history.replaceState({}, '', window.location.pathname)
     }
   }
 
-  const noFooter = path.startsWith('/boards/') && path !== '/boards'
+  // Admin route: no Navbar/Footer chrome — standalone dark shell
+  const isAdminRoute = path.startsWith('/admin')
+  const noFooter = (path.startsWith('/boards/') && path !== '/boards') || isAdminRoute
 
   if (authLoading) return <Splash />
 
   return (
     <div className="flex flex-col min-h-screen">
-      {isDemo && <DemoBanner />}
-      <Navbar onAuthClick={openAuth} />
+      {isDemo && !isAdminRoute && <DemoBanner />}
+      {!isAdminRoute && <Navbar onAuthClick={openAuth} />}
 
-      {isStripeSuccess && (
+      {isStripeSuccess && !isAdminRoute && (
         <div className="bg-emerald-50 border-b border-emerald-200">
           <div className="max-w-6xl mx-auto px-5 py-2.5 text-center text-[13px] text-emerald-700 font-medium">
             <span className="inline-flex items-center gap-2"><IlluPaymentSuccess size={20} /> Payment successful! Your plan is being upgraded — this may take a moment.</span>
@@ -115,8 +111,11 @@ function Inner() {
           <Route path="/dashboard/boards/:slug"
             component={AdminBoardPage}
           />
-          <Route path="/trial/:token" 
-            component={TrialPage} 
+          <Route path="/trial/:token"
+            component={TrialPage}
+          />
+          <Route path="/admin"
+            component={AdminPage}
           />
           <Route path="*"
             component={() => (

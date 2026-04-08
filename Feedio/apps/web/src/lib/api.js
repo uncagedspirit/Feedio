@@ -115,3 +115,27 @@ export async function invokeRedeemTrial(token) {
     return { data: null, error: err }
   }
 }
+
+/**
+ * Calls the admin-api edge function.
+ * Only works for users whose ID is in the ADMIN_USER_IDS Supabase secret.
+ *
+ * @param {string} action — the admin action to perform
+ * @param {Record<string, unknown>} params — action-specific parameters
+ * @returns {{ data: unknown | null, error: Error | null }}
+ */
+export async function invokeAdminApi(action, params = {}) {
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-api', {
+      body: { action, ...params },
+    })
+    if (error) {
+      console.error('[api] invokeAdminApi error:', error.message ?? error)
+      return { data: null, error }
+    }
+    return { data, error: null }
+  } catch (err) {
+    console.error('[api] invokeAdminApi unexpected error:', err)
+    return { data: null, error: err }
+  }
+}
