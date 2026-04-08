@@ -115,6 +115,9 @@ function Inner() {
           <Route path="/dashboard/boards/:slug"
             component={AdminBoardPage}
           />
+          <Route path="/trial/:token" 
+            component={TrialPage} 
+          />
           <Route path="*"
             component={() => (
               <div className="min-h-[80vh] flex items-center justify-center">
