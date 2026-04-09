@@ -10,7 +10,7 @@ import BoardsPage from './pages/BoardsPage'
 import PublicBoardPage from './pages/PublicBoardPage'
 import DashboardPage from './pages/DashboardPage'
 import AdminBoardPage from './pages/AdminBoardPage'
-// import TrialPage from './pages/TrialPage'
+import TrialPage from './pages/TrialPage'
 import AdminPage from './pages/AdminPage'
 
 // ─── Spinner for the auth-loading state ─────────────────────────────────────
@@ -111,9 +111,9 @@ function Inner() {
           <Route path="/dashboard/boards/:slug"
             component={AdminBoardPage}
           />
-          {/* <Route path="/trial/:token" */}
-            {/* component={TrialPage} */}
-          {/* />  */}
+          <Route path="/trial/:token"
+            component={TrialPage}
+          /> 
           <Route path="/admin"
             component={AdminPage}
           />

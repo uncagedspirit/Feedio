@@ -126,3 +126,21 @@ BEGIN
   RETURN v_token;
 END;
 $$;
+
+
+-- -- Run this in the Supabase SQL Editor whenever you need a new batch:
+
+-- -- A batch for a ProductHunt launch (up to 500 redemptions, 30-day trial)
+-- SELECT public.generate_trial_token('ProductHunt April 2026', 500, 30);
+
+-- -- A single-use personal invite
+-- SELECT public.generate_trial_token('Personal invite - Jane', 1, 30);
+
+-- -- See all active links
+-- SELECT token, label, use_count, max_uses, expires_at
+-- FROM public.trial_links
+-- WHERE is_active = true
+-- ORDER BY created_at DESC;
+
+-- -- Deactivate a link (e.g. after a campaign ends)
+-- UPDATE public.trial_links SET is_active = false WHERE token = 'abc123...';

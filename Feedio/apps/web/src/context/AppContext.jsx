@@ -79,6 +79,23 @@ async function callEnforceAccess() {
   }
 }
 
+// ─── REDEEM-TRIAL HELPER ──────────────────────────────────────────────────────
+// Calls the redeem-trial edge function with a pending trial token.
+// Never throws — failures are logged but must not block login.
+async function invokeRedeemTrial(token) {
+  try {
+    const { data, error } = await supabase.functions.invoke('redeem-trial', { body: { token } })
+    if (error) {
+      console.warn('[redeem-trial] edge function returned error:', error.message ?? error)
+      return { data: null }
+    }
+    return { data }
+  } catch (err) {
+    console.warn('[redeem-trial] network error — skipping:', err)
+    return { data: null }
+  }
+}
+
 // ─── PROVIDER ────────────────────────────────────────────────────────────────
 export function AppProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null)
@@ -160,6 +177,19 @@ export function AppProvider({ children }) {
     const user = {
       ...profile,
       subscriptionState: subscriptionState ?? profile.subscriptionState,
+    }
+
+    // Redeem a pending trial link if one was stored before sign-in
+    const pendingTrial = sessionStorage.getItem('feedio_pending_trial')
+    if (pendingTrial && SUPABASE_ENABLED) {
+      // Fire-and-forget — TrialPage handles the UX; we just need the DB updated
+      invokeRedeemTrial(pendingTrial).then(({ data }) => {
+        if (data?.ok) {
+          sessionStorage.removeItem('feedio_pending_trial')
+          // Re-fetch the profile so plan shows as pro immediately
+          fetchProfile(data.user ?? user).then(p => p && setCurrentUser(p))
+        }
+      })
     }
 
     setCurrentUser(user)
