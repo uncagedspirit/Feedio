@@ -1,19 +1,26 @@
 /**
  * History-API router — clean URLs with no # prefix.
- *
- * Uses window.history.pushState / popstate.
- * For deployment: configure your server/CDN to serve index.html for all routes.
- *   - Vite dev server: already handled
- *   - Netlify: add a _redirects file (/* /index.html 200)
- *   - Vercel: add vercel.json rewrites
- *   - Nginx: try_files $uri /index.html
+ * Now fires PostHog page views on every route change.
  */
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { trackPageView } from '../lib/analytics.js'
 
 const RouterContext = createContext(null)
 
 function parsePath() {
   return window.location.pathname || '/'
+}
+
+/** Maps a pathname to a human-readable page title for analytics. */
+function getPageTitle(path) {
+  if (path === '/')                          return 'Landing'
+  if (path === '/boards')                    return 'Public boards'
+  if (path.startsWith('/boards/'))           return 'Public board'
+  if (path === '/dashboard')                 return 'Dashboard'
+  if (path.startsWith('/dashboard/boards/')) return 'Admin board'
+  if (path.startsWith('/trial/'))            return 'Trial redemption'
+  if (path === '/admin')                     return 'Admin panel'
+  return 'Unknown'
 }
 
 export function RouterProvider({ children }) {
@@ -24,6 +31,11 @@ export function RouterProvider({ children }) {
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
+
+  // Fire a PostHog page view whenever the path changes
+  useEffect(() => {
+    trackPageView(path, getPageTitle(path))
+  }, [path])
 
   const navigate = useCallback((to) => {
     window.history.pushState(null, '', to)
@@ -42,7 +54,6 @@ export function useRouter() {
   return useContext(RouterContext)
 }
 
-// Supports :param segments and * wildcard
 function matchRoute(pattern, path) {
   if (pattern === '*') return {}
   const pp = pattern.split('/').filter(Boolean)

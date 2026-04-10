@@ -7,6 +7,28 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,700;0,9..144,800;0,9..144,900;1,9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!--
+      Plausible Analytics — lightweight, privacy-first page view tracking.
+      Replace "YOUR_DOMAIN" with your VITE_PLAUSIBLE_DOMAIN value.
+      The `data-domain` attribute must match what you registered in Plausible.
+      `defer` means it won't block rendering.
+      The `outbound-links` extension auto-tracks clicks to external sites.
+    -->
+    <script
+      defer
+      data-domain="YOUR_DOMAIN"
+      src="https://plausible.io/js/script.outbound-links.js"
+    ></script>
+    <!--
+      This snippet lets us fire custom Plausible goals from JS via window.plausible()
+      even if the main script hasn't loaded yet (queues events).
+    -->
+    <script>
+      window.plausible = window.plausible || function() {
+        (window.plausible.q = window.plausible.q || []).push(arguments)
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
