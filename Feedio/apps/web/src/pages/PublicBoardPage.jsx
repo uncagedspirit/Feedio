@@ -16,6 +16,7 @@ import {
 import FeedbackCard from '../components/boards/FeedbackCard'
 import RoadmapView from '../components/boards/RoadmapView'
 import AddRequestModal from '../components/boards/AddRequestModal'
+import { Analytics } from '../lib/analytics.js'
 
 const SORT_OPTIONS = [
   { value: 'top',      label: 'Most voted',  Icon: IlluSortFire      },
@@ -32,6 +33,7 @@ export default function PublicBoardPage({ params }) {
     if (board?.id) {
       loadBoardPosts(board.id)
       loadMyVotes(board.id)
+      Analytics.boardViewed(board)
     }
   }, [board?.id, loadBoardPosts, loadMyVotes])
 

@@ -5,6 +5,7 @@ import { Icons } from '../components/ui/Icons'
 import { Avatar, Button, EmptyState } from '../components/ui/index'
 import { IlluAuthRequired, IlluNoBoards, IlluWaveHand, IlluPublic, IlluPrivate } from '../components/illustrations'
 import CreateBoardModal from '../components/boards/CreateBoardModal'
+import { Analytics } from '../lib/analytics.js'
 
 // ─── PRO UPGRADE SUCCESS BANNER ───────────────────────────────────────────────
 function ProSuccessBanner({ onDismiss }) {
@@ -210,7 +211,8 @@ export default function DashboardPage({ onAuthClick }) {
                   style={{ width: `${Math.min(100, (interactionsUsed / 25) * 100)}%` }} />
               </div>
             </div>
-            <Button variant="pro" size="sm" onClick={upgradePlan}
+            <Button variant="pro" size="sm"
+              onClick={() => { Analytics.upgradeStarted('free_plan_banner'); upgradePlan() }}
               leftIcon={<Icons.Crown size={13} />} className="flex-shrink-0">
               Upgrade to Pro
             </Button>
@@ -379,7 +381,7 @@ export default function DashboardPage({ onAuthClick }) {
                 <ArchivedBoardCard
                   key={board.id}
                   board={board}
-                  onUpgrade={upgradePlan}
+                  onUpgrade={() => { Analytics.upgradeStarted('frozen_board_card'); upgradePlan() }}
                 />
               ))}
             </div>

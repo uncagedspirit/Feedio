@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext'
 import { getPastelColor, STATUS_CONFIG, TAG_COLORS } from '../../data/mockData'
 import { Icons } from '../ui/Icons'
 import { Badge } from '../ui/index'
+import { Analytics } from '../../lib/analytics.js'
 
 /**
  * FeedbackCard
@@ -46,6 +47,7 @@ export default function FeedbackCard({
     e.stopPropagation()
     if (!interactive) return
     toggleUpvote(post.id, board?.id)
+    if (!voted) Analytics.postUpvoted(post, board)
   }
 
   // Position the dropdown using fixed coords from the button rect

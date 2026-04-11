@@ -10,6 +10,7 @@ import {
 import { supabase, SUPABASE_ENABLED } from '../lib/supabase'
 import { openProCheckout, openBillingPortal } from '../lib/payment'
 import { MOCK_BOARDS, MOCK_POSTS, MOCK_USERS } from '../data/mockData'
+import { Analytics, identifyUser, resetIdentity } from '../lib/analytics.js'
 
 const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
@@ -118,12 +119,18 @@ export function AppProvider({ children }) {
   // ── Auth state listener ──────────────────────────────────────────────────
   useEffect(() => {
     if (!SUPABASE_ENABLED) {
-      setCurrentUser(ls_get(LS.USER, null))
+      const savedUser = ls_get(LS.USER, null)
+      setCurrentUser(savedUser)
+      if (savedUser) identifyUser(savedUser)
       setAuthLoading(false)
       return
     }
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) setCurrentUser(await fetchProfile(session.user))
+      if (session?.user) {
+        const profile = await fetchProfile(session.user)
+        setCurrentUser(profile)
+        if (profile) identifyUser(profile)
+      }
       setAuthLoading(false)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -163,6 +170,7 @@ export function AppProvider({ children }) {
         plan: 'free', avatarInitials: email.slice(0, 2).toUpperCase(), avatarColor: '#E0F2FE',
         subscriptionState: 'free' }
       setCurrentUser(u); ls_set(LS.USER, u)
+      Analytics.login(u)
       return { ok: true, user: u }
     }
 
@@ -193,6 +201,7 @@ export function AppProvider({ children }) {
     }
 
     setCurrentUser(user)
+    Analytics.login(user)
     return { ok: true, user }
   }, [fetchProfile])
 
@@ -202,6 +211,8 @@ export function AppProvider({ children }) {
       const u = { id: `user-${Date.now()}`, name, email, plan: 'free',
         avatarInitials: initials, avatarColor: '#CCFBF1', subscriptionState: 'free' }
       setCurrentUser(u); ls_set(LS.USER, u)
+      Analytics.signup(u)
+      Analytics.login(u)
       return { ok: true, user: u }
     }
 
@@ -221,11 +232,17 @@ export function AppProvider({ children }) {
     }
 
     setCurrentUser(user)
+    Analytics.signup(user)
+    Analytics.login(user)
     return { ok: true, user }
   }, [fetchProfile])
 
   const logout = useCallback(async () => {
-    if (!SUPABASE_ENABLED) { setCurrentUser(null); localStorage.removeItem(LS.USER); return }
+    if (!SUPABASE_ENABLED) {
+      Analytics.logout()
+      setCurrentUser(null); localStorage.removeItem(LS.USER); return
+    }
+    Analytics.logout()
     await supabase.auth.signOut()
     setCurrentUser(null)
   }, [])
@@ -233,9 +250,12 @@ export function AppProvider({ children }) {
   // ── upgradePlan — initiates a checkout session via the payment layer ─────
   const upgradePlan = useCallback(async () => {
     if (!SUPABASE_ENABLED) {
+      Analytics.upgradeStarted('dashboard')
       setCurrentUser(u => u ? { ...u, plan: 'pro', subscriptionState: 'active' } : u)
+      Analytics.upgradeCompleted()
       return { ok: true }
     }
+    Analytics.upgradeStarted('dashboard')
     const { error } = await openProCheckout()
     return error ? { ok: false, error } : { ok: true }
   }, [])
@@ -288,12 +308,16 @@ export function AppProvider({ children }) {
     }
     if (!SUPABASE_ENABLED) {
       const board = dbBoard({ ...row, id: `board-${Date.now()}`, created_at: new Date().toISOString() })
-      setBoards(prev => [board, ...prev]); return board
+      setBoards(prev => [board, ...prev])
+      Analytics.boardCreated(board)
+      return board
     }
     const { data: ins, error } = await supabase.from('boards').insert(row).select().single()
     if (error) { console.error('[boards] create:', error); return null }
     const board = dbBoard(ins)
-    setBoards(prev => [board, ...prev]); return board
+    setBoards(prev => [board, ...prev])
+    Analytics.boardCreated(board)
+    return board
   }, [])
 
   const updateBoard = useCallback(async (boardId, updates) => {
@@ -335,6 +359,8 @@ export function AppProvider({ children }) {
       const post = dbPost({ ...row, id: `post-${Date.now()}`, upvotes: 0, pinned: false, trending: false, created_at: new Date().toISOString() })
       setPosts(prev => [post, ...prev])
       setBoards(prev => prev.map(b => b.id === boardId ? { ...b, totalInteractions: (b.totalInteractions ?? 0) + 1 } : b))
+      const boardForAnalytics = boards.find(b => b.id === boardId)
+      if (boardForAnalytics) Analytics.postSubmitted(boardForAnalytics, dbPost({ ...row, id: `post-${Date.now()}` }))
       return post
     }
     const { data: ins, error } = await supabase.from('posts').insert(row).select().single()
@@ -344,7 +370,7 @@ export function AppProvider({ children }) {
     await supabase.from('boards').update({ total_interactions: (getBoardBySlug('') || {}).totalInteractions }).eq('id', boardId)
     setBoards(prev => prev.map(b => b.id === boardId ? { ...b, totalInteractions: (b.totalInteractions ?? 0) + 1 } : b))
     return post
-  }, [getBoardBySlug])
+  }, [getBoardBySlug, boards])
 
   const updatePost = useCallback(async (postId, updates) => {
     const row = {}

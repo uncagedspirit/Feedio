@@ -16,6 +16,7 @@ import {
 import FeedbackCard from '../components/boards/FeedbackCard'
 import RoadmapView from '../components/boards/RoadmapView'
 import AddRequestModal from '../components/boards/AddRequestModal'
+import { Analytics } from '../lib/analytics.js'
 
 export default function AdminBoardPage({ params }) {
   const {
@@ -68,7 +69,11 @@ export default function AdminBoardPage({ params }) {
     return 0
   })
 
-  const handleStatusChange = (postId, status) => updatePost(postId, { status })
+  const handleStatusChange = (postId, status) => {
+    const post = allPosts.find(p => p.id === postId)
+    if (post) Analytics.postStatusChanged(post, status)
+    updatePost(postId, { status })
+  }
   const handleDelete        = (postId)         => deletePost(postId)
   const handlePin           = (postId)         => {
     const p = allPosts.find(x => x.id === postId)
