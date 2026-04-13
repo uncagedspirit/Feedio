@@ -311,4 +311,4 @@ function MobileFilter({ label, options, value, onChange }) {
       {options.map(o => <option key={o.value} value={o.value}>{label}: {o.label}</option>)}
     </select>
   )
-}
+}               
