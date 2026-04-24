@@ -323,6 +323,7 @@ export function AppProvider({ children }) {
   const updateBoard = useCallback(async (boardId, updates) => {
     const row = {}
     if (updates.settings          != null) row.settings           = updates.settings
+    if (updates.tags              != null) row.tags               = updates.tags
     if (updates.name              != null) row.name               = updates.name
     if (updates.visibility        != null) row.visibility         = updates.visibility
     if (updates.totalInteractions != null) row.total_interactions = updates.totalInteractions
