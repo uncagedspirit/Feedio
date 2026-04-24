@@ -1,0 +1,43 @@
+# dependencies
+/node_modules
+
+# production
+/build
+/dist
+
+# misc
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+
+# logs
+logs
+*.log
+
+# testing
+/coverage
+
+# optional cache
+.cache/
+.parcel-cache/
+
+# next.js / vite
+.next/
+out/
+.vite/
+
+#custom file
+.notes
