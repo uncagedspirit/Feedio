@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useApp } from "../context/AppContext";
 import { useRouter } from "../router";
 import { STATUS_CONFIG } from "../data/mockData";
@@ -49,6 +49,18 @@ export default function AdminBoardPage({ params }) {
   const [addOpen, setAddOpen] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // ── FIX: initialize settings/tags from board, re-sync when board changes ──
+  const [settingsForm, setSettingsForm] = useState(null);
+  const [tagsForm, setTagsForm] = useState(null);
+  const [newTagInput, setNewTagInput] = useState("");
+
+  useEffect(() => {
+    if (board) {
+      setSettingsForm({ ...(board.settings ?? {}) });
+      setTagsForm([...(board.tags ?? ["Feature", "Bug", "Other"])]);
+    }
+  }, [board?.id]); // re-sync only when board ID changes (i.e. new board loaded)
+
   if (!board) {
     return (
       <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center pt-14">
@@ -81,6 +93,9 @@ export default function AdminBoardPage({ params }) {
     );
   }
 
+  // Guard: forms not yet initialized (render nothing until useEffect fires)
+  if (!settingsForm || !tagsForm) return null;
+
   const allPosts = getBoardPosts(board.id);
   const filtered = allPosts.filter(
     (p) => tagFilter === "all" || p.tag === tagFilter,
@@ -102,12 +117,6 @@ export default function AdminBoardPage({ params }) {
     if (p) updatePost(postId, { pinned: !p.pinned });
   };
 
-  const [settingsForm, setSettingsForm] = useState({ ...board.settings });
-  const [tagsForm, setTagsForm] = useState(
-    board.tags ?? ["Feature", "Bug", "Other"],
-  );
-  const [newTagInput, setNewTagInput] = useState("");
-
   const handleSaveSettings = () => {
     updateBoard(board.id, { settings: settingsForm, tags: tagsForm });
     setSaved(true);
@@ -118,13 +127,13 @@ export default function AdminBoardPage({ params }) {
     e.preventDefault();
     const trimmed = newTagInput.trim();
     if (trimmed && !tagsForm.includes(trimmed)) {
-      setTagsForm([...tagsForm, trimmed]);
+      setTagsForm((prev) => [...prev, trimmed]);
       setNewTagInput("");
     }
   };
 
   const handleRemoveTag = (tagToRemove) => {
-    setTagsForm(tagsForm.filter((t) => t !== tagToRemove));
+    setTagsForm((prev) => prev.filter((t) => t !== tagToRemove));
   };
 
   const boardUrl = `${window.location.origin}/boards/${board.slug}`;
@@ -144,7 +153,7 @@ export default function AdminBoardPage({ params }) {
             className="flex items-center gap-1.5 text-white/55 hover:text-white/90 text-[12px] mb-5 transition-colors group"
           >
             <Icons.ArrowLeft
-              size={13}
+              size={16}
               className="group-hover:-translate-x-0.5 transition-transform"
             />
             Dashboard
@@ -159,15 +168,14 @@ export default function AdminBoardPage({ params }) {
                 >
                   {board.name}
                 </h1>
-                {/* Visibility badge using illustration */}
                 <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/15 text-white/80">
                   {board.visibility === "private" ? (
                     <>
-                      <IlluPrivate size={11} /> Private
+                      <IlluPrivate size={13} /> Private
                     </>
                   ) : (
                     <>
-                      <IlluPublic size={11} /> Public
+                      <IlluPublic size={13} /> Public
                     </>
                   )}
                 </span>
@@ -183,14 +191,14 @@ export default function AdminBoardPage({ params }) {
                 size="sm"
                 onClick={() => navigate(`/boards/${board.slug}`)}
                 className="bg-white/10 text-white border border-white/20 hover:bg-white/20"
-                leftIcon={<Icons.Eye size={13} />}
+                leftIcon={<Icons.Eye size={15} />}
               >
                 Public view
               </Button>
               <Button
                 size="sm"
                 onClick={() => setAddOpen(true)}
-                leftIcon={<Icons.Plus size={13} />}
+                leftIcon={<Icons.Plus size={15} />}
               >
                 Add request
               </Button>
@@ -241,7 +249,7 @@ export default function AdminBoardPage({ params }) {
               className={`flex items-center gap-1.5 px-3.5 py-1.5 text-[13px] font-semibold rounded-lg transition-all
                 ${tab === key ? "bg-[#F0FDF4] text-teal-700" : "text-[#6B7280] hover:text-[#374151] hover:bg-[#F9FAFB]"}`}
             >
-              <Icon size={14} />
+              <Icon size={16} />
               {label}
             </button>
           ))}
@@ -263,13 +271,13 @@ export default function AdminBoardPage({ params }) {
                     active={sort === "top"}
                     onClick={() => setSort("top")}
                   >
-                    <IlluSortFire size={14} /> Most voted
+                    <IlluSortFire size={16} /> Most voted
                   </FilterChip>
                   <FilterChip
                     active={sort === "new"}
                     onClick={() => setSort("new")}
                   >
-                    <IlluSortNew size={14} /> Newest
+                    <IlluSortNew size={16} /> Newest
                   </FilterChip>
                 </FilterSection>
                 <FilterSection label="Category">
@@ -309,7 +317,7 @@ export default function AdminBoardPage({ params }) {
                   action={
                     <Button
                       onClick={() => setAddOpen(true)}
-                      leftIcon={<Icons.Plus size={13} />}
+                      leftIcon={<Icons.Plus size={15} />}
                     >
                       Add first request
                     </Button>
@@ -367,7 +375,7 @@ export default function AdminBoardPage({ params }) {
                           className="text-teal-500 hover:text-teal-700 transition-colors"
                           title="Remove tag"
                         >
-                          <Icons.X size={14} />
+                          <Icons.X size={15} />
                         </button>
                       </div>
                     ))}
@@ -390,7 +398,7 @@ export default function AdminBoardPage({ params }) {
                     type="submit"
                     className="px-3 py-2 bg-teal-600 text-white rounded-lg text-[12px] font-semibold hover:bg-teal-700 transition-colors"
                   >
-                    <Icons.Plus size={13} />
+                    <Icons.Plus size={15} />
                   </button>
                 </form>
               </div>
@@ -401,7 +409,7 @@ export default function AdminBoardPage({ params }) {
               subtitle="Control what information submitters must provide"
             >
               <Toggle
-                checked={settingsForm.requireName}
+                checked={settingsForm.requireName ?? true}
                 onChange={(v) =>
                   setSettingsForm((f) => ({
                     ...f,
@@ -413,7 +421,7 @@ export default function AdminBoardPage({ params }) {
                 hint="Consumers must enter their name to submit or vote"
               />
               <Toggle
-                checked={settingsForm.requireEmail}
+                checked={settingsForm.requireEmail ?? false}
                 onChange={(v) =>
                   setSettingsForm((f) => ({
                     ...f,
@@ -425,7 +433,7 @@ export default function AdminBoardPage({ params }) {
                 hint="Email is collected privately — never shown publicly"
               />
               <Toggle
-                checked={settingsForm.allowAnonymous}
+                checked={settingsForm.allowAnonymous ?? false}
                 onChange={(v) =>
                   setSettingsForm((f) => ({
                     ...f,
@@ -437,7 +445,7 @@ export default function AdminBoardPage({ params }) {
                 hint="No name or email required"
               />
               <Toggle
-                checked={settingsForm.showVoterCount}
+                checked={settingsForm.showVoterCount ?? true}
                 onChange={(v) =>
                   setSettingsForm((f) => ({ ...f, showVoterCount: v }))
                 }
@@ -455,15 +463,14 @@ export default function AdminBoardPage({ params }) {
                 </code>
                 <CopyButton text={boardUrl} />
               </div>
-              {/* Visibility note — using illustration inline */}
               <div
                 className={`flex items-center gap-2 text-[12px] px-3 py-2 rounded-lg mt-2
                 ${board.visibility === "private" ? "bg-violet-50 text-violet-600" : "bg-emerald-50 text-emerald-600"}`}
               >
                 {board.visibility === "private" ? (
-                  <IlluPrivate size={14} />
+                  <IlluPrivate size={15} />
                 ) : (
-                  <IlluPublic size={14} />
+                  <IlluPublic size={15} />
                 )}
                 {board.visibility === "private"
                   ? "Only people with this link can access this board."
@@ -488,7 +495,7 @@ export default function AdminBoardPage({ params }) {
                     size="sm"
                     className="flex-shrink-0"
                     onClick={() => navigate("/dashboard")}
-                    leftIcon={<Icons.Crown size={13} />}
+                    leftIcon={<Icons.Crown size={15} />}
                   >
                     Upgrade
                   </Button>
@@ -507,7 +514,7 @@ export default function AdminBoardPage({ params }) {
             <Button onClick={handleSaveSettings} disabled={saved}>
               {saved ? (
                 <>
-                  <Icons.Check size={14} /> Settings saved
+                  <Icons.Check size={16} /> Settings saved
                 </>
               ) : (
                 "Save settings"
@@ -523,7 +530,7 @@ export default function AdminBoardPage({ params }) {
               </p>
               <Button
                 variant="danger"
-                leftIcon={<Icons.Trash size={13} />}
+                leftIcon={<Icons.Trash size={15} />}
                 onClick={() => {
                   if (
                     confirm(
